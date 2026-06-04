@@ -18,10 +18,10 @@ jobs:
       with:
         python-version: '3.10'
 
-    - name: Install Linux System Dependencies
+    - name: Install Essential Build Tools
       run: |
         sudo apt-get update
-        sudo apt-get install -y ccache git libffi-dev libssl-dev autoconf automake libtool pkg-config zlib1g-dev libgstreamer1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good openjdk-17-jdk unzip zip
+        sudo apt-get install -y ccache git libffi-dev libssl-dev autoconf automake libtool pkg-config zlib1g-dev openjdk-17-jdk unzip zip
 
     - name: Install Buildozer & Tools via Pip
       run: |
@@ -30,7 +30,7 @@ jobs:
 
     - name: Compile APK Using Shell Commands
       run: |
-        # 'yes |' automatically accepts Android SDK licenses in headless environments
+        # Automatically accepts Android SDK licenses
         yes | buildozer android debug
 
     - name: Upload Downloadable APK Artifact

@@ -12,6 +12,20 @@ jobs:
     steps:
     - name: Checkout source code
       uses: actions/checkout@v4
+name: Build Android APK
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+    - name: Checkout source code
+      uses: actions/checkout@v4
 
     - name: Set up Python Environment
       uses: actions/setup-python@v5
@@ -30,6 +44,9 @@ jobs:
 
     - name: Compile APK Using Shell Commands
       run: |
+        echo "=== CHECKING REPOSITORY FILES ==="
+        ls -la
+        echo "================================"
         # Automatically accepts Android SDK licenses
         yes | buildozer android debug
 

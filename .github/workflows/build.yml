@@ -13,26 +13,28 @@ jobs:
     - name: Checkout source code
       uses: actions/checkout@v4
 
-    - name: Set up Python environment
+    - name: Set up Python Environment
       uses: actions/setup-python@v5
       with:
         python-version: '3.10'
 
-    - name: Install System Dependencies
+    - name: Install Linux System Dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y ccache git libffi-dev libssl-dev autoconf automake libtool pkg-config zlib1g-dev libgstreamer1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav libgstreamer-plugins-base1.0-dev
-        # Install specific older Android SDK build tools dependencies if required
-        sudo apt-get install -y openjdk-17-jdk unzip zip
+        sudo apt-get install -y ccache git libffi-dev libssl-dev autoconf automake libtool pkg-config zlib1g-dev libgstreamer1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good openjdk-17-jdk unzip zip
 
-    - name: Build APK with Buildozer Action
-      uses: ArtemGovorov/buildozer-action@v1
-      with:
-        command: buildozer android debug
-        repository_root: .
+    - name: Install Buildozer & Tools via Pip
+      run: |
+        pip install --upgrade pip
+        pip install buildozer cython virtualenv
+
+    - name: Compile APK Using Shell Commands
+      run: |
+        # 'yes |' automatically accepts Android SDK licenses in headless environments
+        yes | buildozer android debug
 
     - name: Upload Downloadable APK Artifact
       uses: actions/upload-artifact@v4
       with:
         name: Sudoku-Warriors-APK
-        path: .buildozer/android/platform/build-arm64-v8a_armeabi-v7a/dists/sudokuwarriors/build/outputs/apk/debug/*.apk
+        path: bin/*.apk

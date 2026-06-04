@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sudoku Warriors</title>
+    <style>
+        body { 
+            font-family: sans-serif; 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            background: #f0f2f5; 
+            margin: 0; padding: 20px;
+        }
+        h1 { color: #333; margin-bottom: 5px; }
+        
+        .panel {
+            background: white; padding: 12px 20px; border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05); margin-bottom: 15px;
+            display: flex; gap: 15px; align-items: center;
+        }
+        select, button.action-btn {
+            padding: 8px 12px; font-size: 14px; border-radius: 5px;
+            border: 1px solid #ccc; background: white; cursor: pointer;
+        }
+        button.action-btn { background: #007aff; color: white; border: none; font-weight: bold;}
+
+        .win-banner {
+            background-color: #e6f4ea; color: #137333; border: 2px solid #137333;
+            padding: 15px; border-radius: 8px; margin-bottom: 15px;
+            font-size: 16px; font-weight: bold; text-align: center;
+            display: flex; flex-direction: column; align-items: center; gap: 10px;
+        }
+
+        .error-banner {
+            background-color: #ffebe9; color: #d12420; border: 1px solid rgba(209, 36, 32, 0.3);
+            padding: 12px 15px; border-radius: 8px; margin-bottom: 15px; font-size: 14px; font-weight: bold;
+        }
+
+        .grid { 
+            display: grid; 
+            grid-template-columns: repeat({{ state.size }}, 45px); 
+            grid-template-rows: repeat({{ state.size }}, 45px); 
+            border: 3px solid black; 
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        }
+        .cell { 
+            border: 1px solid #ccc; text-align: center; line-height: 45px; 
+            font-size: 20px; font-weight: bold; background: white; 
+            cursor: pointer; user-select: none; box-sizing: border-box;
+        }
+        
+        .thick-right { border-right: 2px solid black !important; }
+        .thick-bottom { border-bottom: 2px solid black !important; }
+        .readonly { background: #e5e5e5; color: #555; cursor: not-allowed; }
+        .cell.selected { background: #b3d4fc; outline: 2px solid #007aff; z-index: 10; }
+        
+        .instructions { margin-top: 15px; color: #666; font-size: 14px; }
+    </style>
+</head>
+<body>
+
+    <h1>Sudoku Warriors</h1>
+
+    <div class="panel">
+        <form action="/setup" method="POST" style="display: flex; gap: 15px; align-items: center;">
+            <div>
+                <label>Grid Matrix: </label>
+                <select name="size">
+                    <option value="6" {% if state.size == 6 %}selected{% endif %}>6 x 6 Mini</option>
+                    <option value="9" {% if state.size == 9 %}selected{% endif %}>9 x 9 Standard</option>
+                </select>
+            </div>
+            <div>
+                <label>Difficulty: </label>
+                <select name="difficulty">
+                    <option value="easy" {% if state.difficulty == 'easy' %}selected{% endif %}>Easy</option>
+                    <option value="medium" {% if state.difficulty == 'medium' %}selected{% endif %}>Medium</option>
+                    <option value="hard" {% if state.difficulty == 'hard' %}selected{% endif %}>Hard</option>
+                </select>
+            </div>
+            <button type="submit" class="action-btn" style="background: #34c759;">Generate Board</button>
+        </form>
+    </div>
+
+    {% if state.won %}
+        <div class="win-banner">
+            <span>🎉 Mastermind alert! You solved this {{ state.difficulty }} stage puzzle!</span>
+            <form action="/next_stage" method="POST">
+                <button type="submit" class="action-btn">Play Next Stage ➔</button>
+            </form>
+        </div>
+    {% endif %}
+
+    {% with messages = get_flashed_messages() %}
+      {% if messages and not state.won %}
+        <div class="error-banner">{{ messages[0] }}</div>
+      {% endif %}
+    {% endwith %}
+    
+    <div class="grid">
+        {% for r in range(state.size) %}
+            {% for c in range(state.size) %}
+                {% set val = state.board[r][c] %}
+                {% set is_orig = state.original[r][c] != 0 %}
+                
+                {% set border_r = (r + 1) % state.block_r == 0 and (r + 1) != state.size %}
+                {% set border_c = (c + 1) % state.block_c == 0 and (c + 1) != state.size %}
+                
+                <div class="cell 
+                            {% if is_orig %}readonly{% endif %} 
+                            {% if border_r %}thick-bottom{% endif %} 
+                            {% if border_c %}thick-right{% endif %}"
+                     data-row="{{ r + 1 }}" 
+                     data-col="{{ c + 1 }}"
+                     {% if not is_orig and not state.won %}onclick="selectCell(this)"{% endif %}>
+                    {% if val != 0 %}{{ val }}{% else %}&nbsp;{% endif %}
+                </div>
+            {% endfor %}
+        {% endfor %}
+    </div>
+
+    <p class="instructions">
+        {% if state.won %}
+            Stage Cleared, Warrior! Click "Play Next Stage" to draw your next challenge.
+        {% else %}
+            Tap a cell to select, then input your key (1-{{ state.size }}).
+        {% endif %}
+    </p>
+
+    <form id="hidden-move-form" action="/move" method="POST" style="display: none;">
+        <input type="hidden" id="form-row" name="row">
+        <input type="hidden" id="form-col" name="col">
+        <input type="hidden" id="form-num" name="num">
+    </form>
+
+    <script>
+        let currentSelectedCell = null;
+        const maxLimit = {{ state.size }};
+        const isGameWon = {{ 'true' if state.won else 'false' }};
+
+        function selectCell(cellElement) {
+            if (isGameWon) return;
+            if (currentSelectedCell) currentSelectedCell.classList.remove('selected');
+            currentSelectedCell = cellElement;
+            currentSelectedCell.classList.add('selected');
+        }
+
+        document.addEventListener('keydown', function(event) {
+            if (!currentSelectedCell || isGameWon) return;
+            
+            if (event.key >= '1' && event.key <= maxLimit.toString()) {
+                document.getElementById('form-row').value = currentSelectedCell.getAttribute('data-row');
+                document.getElementById('form-col').value = currentSelectedCell.getAttribute('data-col');
+                document.getElementById('form-num').value = event.key;
+                document.getElementById('hidden-move-form').submit();
+            }
+        });
+    </script>
+</body>
+</html>

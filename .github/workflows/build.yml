@@ -2,41 +2,42 @@ name: Build Android APK
 
 on:
   push:
-    branches: [ main, master ]
-  workflow_dispatch:
+    branches: [ main ]
 
 jobs:
   build:
     runs-on: ubuntu-22.04
 
     steps:
-    - name: Checkout source code
+    - name: Checkout Repository
       uses: actions/checkout@v4
 
-    - name: Set up Python Environment
+    - name: Set up Python
       uses: actions/setup-python@v5
       with:
         python-version: '3.10'
 
-    - name: Install Essential Build Tools
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+
+    - name: Install System Dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y ccache git libffi-dev libssl-dev autoconf automake libtool pkg-config zlib1g-dev openjdk-17-jdk unzip zip
+        sudo apt-get install -y ccache git libffi-dev libssl-dev autoconf automake libtool pkg-config zlib1g-dev unzip zip
 
-    - name: Install Buildozer & Tools via Pip
+    - name: Install Buildozer & Cython
       run: |
         pip install --upgrade pip
-        pip install buildozer cython virtualenv
+        pip install cython virtualenv buildozer
 
-    - name: Compile APK Using Shell Commands
+    - name: Compile APK with Buildozer
       run: |
-        echo "=== CHECKING REPOSITORY FILES ==="
-        ls -la
-        echo "================================"
-        # Automatically accepts Android SDK licenses
         yes | buildozer android debug
 
-    - name: Upload Downloadable APK Artifact
+    - name: Upload APK Artifact
       uses: actions/upload-artifact@v4
       with:
         name: Sudoku-Warriors-APK

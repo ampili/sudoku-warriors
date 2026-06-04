@@ -19,8 +19,8 @@ source.include_exts = py,png,jpg,kv,atlas,json,html,css,js
 version = 1.0.0
 
 # (list) Application requirements
-# Added pyjnius explicitly to fix the backend dependency error
-requirements = python3,kivy,pyjnius
+# Added hostpython3 to fix the version distribution resolution error
+requirements = python3,hostpython3,kivy,pyjnius
 
 # (str) Supported orientations
 orientation = portrait

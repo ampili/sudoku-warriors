@@ -1,10 +1,20 @@
 import random
+import threading
 from flask import Flask, render_template, request, redirect, url_for, flash
+
+# Kivy graphical requirements
+from kivy.app import App
+from kivy.uix.widget import Widget
+from kivy.clock import Clock
+
+# Android hardware thread controls
+from android.runnable import run_on_ui_thread
+from jnius import autoclass
 
 app = Flask(__name__)
 app.secret_key = 'sudoku_arcade_secret_key'
 
-# Perfect base solved matrices to seed our infinite shuffling engine
+# Base solved matrices to seed our infinite shuffling engine
 BASE_BOARDS = {
     6: [
         [1, 2, 3, 4, 5, 6],
@@ -39,10 +49,7 @@ game_state = {
 }
 
 def generate_procedural_puzzle(size, difficulty):
-    """Mutates base solved boards to create distinct puzzles instantly."""
     base = [row[:] for row in BASE_BOARDS[size]]
-    
-    # 1. Randomize values by swapping numbers globally
     nums = list(range(1, size + 1))
     shuffled_nums = list(range(1, size + 1))
     random.shuffle(shuffled_nums)
@@ -52,11 +59,9 @@ def generate_procedural_puzzle(size, difficulty):
         for c in range(size):
             base[r][c] = mapping[base[r][c]]
             
-    # 2. Determine cell knockout ratio based on difficulty
     mask_rates = {'easy': 0.35, 'medium': 0.55, 'hard': 0.70}
     rate = mask_rates.get(difficulty, 0.4)
     
-    # Clone for editing
     play_board = [row[:] for row in base]
     orig_board = [[0]*size for _ in range(size)]
     
@@ -71,15 +76,12 @@ def generate_procedural_puzzle(size, difficulty):
 
 def check_valid_move(bo, num, pos, size, br, bc):
     row, col = pos
-    # Row validation
     for j in range(size):
         if bo[row][j] == num and col != j:
             return f"There is already a {num} in that row. Keep searching!"
-    # Column validation
     for i in range(size):
         if bo[i][col] == num and row != i:
             return f"Vertical clash! Another {num} blocks this column."
-    # Box validation
     box_x = col // bc
     box_y = row // br
     for i in range(box_y * br, box_y * br + br):
@@ -99,7 +101,6 @@ def check_win_condition():
                 return False
     return True
 
-# Initialize a default game grid on launch
 game_state['board'], game_state['original'] = generate_procedural_puzzle(9, 'easy')
 
 @app.route('/')
@@ -160,5 +161,35 @@ def next_stage():
     )
     return redirect(url_for('index'))
 
+# --- Native Android Window Wrapper ---
+def start_flask_server():
+    app.run(host='127.0.0.1', port=5000, debug=False, threaded=True)
+
+class SudokuWarriorsApp(App):
+    def build(self):
+        # Added a 2.0 second delay to give Flask full breathing room to boot up cleanly
+        Clock.schedule_once(self.initialize_android_webview, 2.0)
+        return Widget()
+
+    # The magic decorator that forces Android to run this inside the primary UI thread safely
+    @run_on_ui_thread
+    def initialize_android_webview(self, *args):
+        PythonActivity = autoclass('org.kivy.android.PythonActivity')
+        activity = PythonActivity.mActivity
+        WebView = autoclass('android.webkit.WebView')
+        WebViewClient = autoclass('android.webkit.WebViewClient')
+        
+        webview = WebView(activity)
+        webview.getSettings().setJavaScriptEnabled(True)
+        webview.getSettings().setDomStorageEnabled(True)
+        webview.setWebViewClient(WebViewClient())
+        
+        webview.loadUrl('http://127.0.0.1:5000/')
+        activity.setContentView(webview)
+
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    flask_thread = threading.Thread(target=start_flask_server)
+    flask_thread.daemon = True
+    flask_thread.start()
+    
+    SudokuWarriorsApp().run()

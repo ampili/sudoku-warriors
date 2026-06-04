@@ -12,21 +12,20 @@ package.domain = org.example
 # (string) Source code directory
 source.dir = .
 
-# (list) Source files to include
-source.include_exts = py,png,jpg,kv,atlas,json,html,css,js
+# (list) Source files to include (Added ttf, wav, mp3 to prevent runtime crashes)
+source.include_exts = py,png,jpg,kv,atlas,json,html,css,js,ttf,wav,mp3
 
 # (string) Application version
 version = 1.0.0
 
 # (list) Application requirements
-# Added hostpython3 to fix the version distribution resolution error
 requirements = python3,hostpython3,kivy,pyjnius
 
 # (str) Supported orientations
 orientation = portrait
 
-# (int) Target Android API
-android.api = 33
+# (int) Target Android API (Bumped to 34 to satisfy Google Play submission rules)
+android.api = 34
 
 # (int) Minimum API your APK will support
 android.minapi = 21

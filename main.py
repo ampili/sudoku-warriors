@@ -2,16 +2,22 @@ import random
 import threading
 from flask import Flask, render_template, request, redirect, url_for, flash
 
-# Kivy graphical requirements
+# Kivy graphic controls
 from kivy.app import App
 from kivy.uix.widget import Widget
 from kivy.clock import Clock
 
-# Android hardware thread controls
+# Android thread and JNI environment connectors
 from android.runnable import run_on_ui_thread
 from jnius import autoclass
 
-app = Flask(__name__)
+# CRITICAL FIX: Pre-cache Java classes on the main Kivy thread to avoid native JNI crashes
+PythonActivity = autoclass('org.kivy.android.PythonActivity')
+WebView = autoclass('android.webkit.WebView')
+WebViewClient = autoclass('android.webkit.WebViewClient')
+
+# CRITICAL FIX: Force Flask to look both in 'templates' and the root directory for your HTML files
+app = Flask(__name__, template_folder='.', static_folder='.')
 app.secret_key = 'sudoku_arcade_secret_key'
 
 # Base solved matrices to seed our infinite shuffling engine
@@ -37,7 +43,6 @@ BASE_BOARDS = {
     ]
 }
 
-# App Global State Tracker
 game_state = {
     'size': 9,
     'block_r': 3,
@@ -105,20 +110,22 @@ game_state['board'], game_state['original'] = generate_procedural_puzzle(9, 'eas
 
 @app.route('/')
 def index():
-    return render_template('index.html', state=game_state)
+    # Tries to render index.html seamlessly from templates/ or the root application folder
+    try:
+        return render_template('index.html', state=game_state)
+    except Exception as e:
+        return f"Core UI Error: Template file missing. Details: {str(e)}", 500
 
 @app.route('/setup', methods=['POST'])
 def setup():
     global game_state
     size = int(request.form.get('size', 9))
     diff = request.form.get('difficulty', 'easy')
-    
     game_state['size'] = size
     game_state['difficulty'] = diff
     game_state['block_r'] = 2 if size == 6 else 3
     game_state['block_c'] = 3
     game_state['won'] = False
-    
     game_state['board'], game_state['original'] = generate_procedural_puzzle(size, diff)
     return redirect(url_for('index'))
 
@@ -126,7 +133,6 @@ def setup():
 def move():
     if game_state['won']:
         return redirect(url_for('index'))
-        
     r = int(request.form['row']) - 1
     c = int(request.form['col']) - 1
     num = int(request.form['num'])
@@ -136,12 +142,7 @@ def move():
         if game_state['original'][r][c] == 0:
             old_val = game_state['board'][r][c]
             game_state['board'][r][c] = num
-            
-            error_msg = check_valid_move(
-                game_state['board'], num, (r, c), 
-                sz, game_state['block_r'], game_state['block_c']
-            )
-            
+            error_msg = check_valid_move(game_state['board'], num, (r, c), sz, game_state['block_r'], game_state['block_c'])
             if error_msg:
                 game_state['board'][r][c] = old_val 
                 openers = ["Nice try, Einstein! ", "Bold strategy, but no. ", "Sudoku police alert! "]
@@ -149,43 +150,36 @@ def move():
             else:
                 if check_win_condition():
                     game_state['won'] = True
-            
     return redirect(url_for('index'))
 
 @app.route('/next_stage', methods=['POST'])
 def next_stage():
     global game_state
     game_state['won'] = False
-    game_state['board'], game_state['original'] = generate_procedural_puzzle(
-        game_state['size'], game_state['difficulty']
-    )
+    game_state['board'], game_state['original'] = generate_procedural_puzzle(game_state['size'], game_state['difficulty'])
     return redirect(url_for('index'))
 
-# --- Native Android Window Wrapper ---
 def start_flask_server():
     app.run(host='127.0.0.1', port=5000, debug=False, threaded=True)
 
 class SudokuWarriorsApp(App):
     def build(self):
-        # Added a 2.0 second delay to give Flask full breathing room to boot up cleanly
+        # Fetch the active window instance safely from the Kivy runtime thread context
+        self.activity = PythonActivity.mActivity
+        # Trigger the layout system switch after a safe 2-second framework stabilization delay
         Clock.schedule_once(self.initialize_android_webview, 2.0)
         return Widget()
 
-    # The magic decorator that forces Android to run this inside the primary UI thread safely
     @run_on_ui_thread
     def initialize_android_webview(self, *args):
-        PythonActivity = autoclass('org.kivy.android.PythonActivity')
-        activity = PythonActivity.mActivity
-        WebView = autoclass('android.webkit.WebView')
-        WebViewClient = autoclass('android.webkit.WebViewClient')
-        
-        webview = WebView(activity)
+        # Uses pre-cached global Java references to guarantee zero thread execution collisions
+        webview = WebView(self.activity)
         webview.getSettings().setJavaScriptEnabled(True)
         webview.getSettings().setDomStorageEnabled(True)
         webview.setWebViewClient(WebViewClient())
         
         webview.loadUrl('http://127.0.0.1:5000/')
-        activity.setContentView(webview)
+        self.activity.setContentView(webview)
 
 if __name__ == '__main__':
     flask_thread = threading.Thread(target=start_flask_server)
